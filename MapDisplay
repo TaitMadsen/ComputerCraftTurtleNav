@@ -1,0 +1,98 @@
+-- MapDisplay
+
+os.loadAPI("Map")
+
+args = {...}
+if #args ~= 1 then
+	print("Usage: MapDisplay <file name of map>")
+	error()
+end
+
+function topDown(map, z, topLeftX, topLeftY)
+	term.clear()
+	term.setCursorPos(1,1)
+	print("Top Down Map View")
+	print("Z: " .. z .. " top-left X: " .. topLeftX .. " Y: " .. topLeftY)
+	
+	local screenWidth, screenHeight = term.getSize()
+	
+	for y=0,screenHeight - 5 do
+		for x=0,screenWidth - 1 do
+			term.setCursorPos(x+1, y+3)
+			-- get data from map
+			local data = map:query(topLeftX + x, topLeftY - y, z)
+			
+			if data == "unknown" then
+				term.write("u")
+			elseif data == "empty" then
+				term.write(" ")
+			elseif data == "solid" then
+				term.write("s")
+			elseif data == "liquid" then
+				term.write("l")
+			else
+				term.write("?")
+			end
+		end
+	end
+	
+	-- draw the turtle, facing the appropriate way, if it should be on-screen
+	if z == map.nav.z then
+		local turtleXmod = map.nav.x - topLeftX
+		local turtleYmod = topLeftY - map.nav.y
+		if turtleXmod <= screenWidth and turtleXmod >= 0 and turtleYmod <= screenHeight - 4 and turtleYmod >= 0 then
+			term.setCursorPos(turtleXmod + 1, turtleYmod+3)
+			local facingTable = {"^", ">", "v", "<"}
+			term.write( facingTable[map.nav.facing] )
+		end
+	end
+	
+	term.setCursorPos(1, screenHeight - 1)
+	term.write("WASD pan, IK up/dwn, EXIT")
+	term.setCursorPos(1, screenHeight)
+end
+
+
+function main()
+	local map = Map.loadFromFile(args[1])
+	local z = map.nav.z
+	local screenWidth, screenHeight = term.getSize()
+	local topLeftX = map.nav.x - math.floor(screenWidth/2)
+	local topLeftY = map.nav.y + math.floor( (screenHeight-4)/2)
+	
+	while true do
+		topDown(map, z, topLeftX, topLeftY)
+		local input = read()
+		
+		if input == "W" then
+			topLeftY = topLeftY + 1
+		elseif input == "A" then
+			topLeftX = topLeftX - 1
+		elseif input == "S" then
+			topLeftY = topLeftY - 1
+		elseif input == "D" then
+			topLeftX = topLeftX + 1
+		
+		elseif input == "I" then
+			z = z + 1
+		elseif input == "K" then
+			z = z - 1
+		
+		elseif input == "EXIT" then
+			return
+		end
+	end
+end
+
+
+main()
+	
+
+
+
+
+
+
+
+
+

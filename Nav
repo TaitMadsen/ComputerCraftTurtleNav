@@ -1,0 +1,158 @@
+-- Nav library
+-- a metatable object
+
+-- load TBM
+os.loadAPI('TBM')
+
+Nav = {}
+
+-- constructors, loading, and saving
+function construct(x, y, z, facing, fileName)
+	local object = {x=x, y=y, z=z, facing=facing, fileName=fileName}
+	setmetatable(object, {__index=Nav} )
+	object:saveCoords()
+	return object
+end
+
+function new(fileName)
+	return construct(0,0,0,1, fileName) -- note that this is zero-based!
+end
+
+function loadFromFile(fileName)
+	local h = fs.open(fileName, 'r')
+	local t = h.readAll()
+	h.close()
+	t = textutils.unserialize(t)
+	return construct(t.x, t.y, t.z, t.facing, fileName)
+end
+
+function Nav:saveCoords()
+	local h = fs.open(self.fileName, 'w')
+	h.write( textutils.serialize(self) )
+	h.close()
+end
+
+-- moving about
+function Nav:forward()
+	local success = turtle.forward()
+	if success then
+	
+		if self.facing == 1 then
+			self.y = self.y + 1
+		elseif self.facing == 2 then
+			self.x = self.x + 1
+		elseif self.facing == 3 then
+			self.y = self.y - 1
+		elseif self.facing == 4 then
+			self.x = self.x - 1
+		else
+			-- facing is not within domain
+			error( TBM.log("Facing is " .. self.facing .. ", not within domain={1,2,3,4}") )
+		end
+		
+		self:saveCoords()
+	end
+	
+	return success
+end
+
+function Nav:back()
+	local success = turtle.back()
+	if success then
+
+		if self.facing == 1 then
+			self.y = self.y - 1
+		elseif self.facing == 2 then
+			self.x = self.x - 1
+		elseif self.facing == 3 then
+			self.y = self.y + 1
+		elseif self.facing == 4 then
+			self.x = self.x + 1
+		else
+			error( TBM.log("Facing is " .. self.facing .. ", not within domain={1,2,3,4}") )
+		end
+	
+		self:saveCoords()
+	end
+	
+	return success
+end
+
+function Nav:up()
+	local success = turtle.up()
+	if success then
+		self.z = self.z + 1
+		self:saveCoords()
+	end
+	
+	return success
+end
+
+function Nav:down()
+	local success = turtle.down()
+	if success then
+		self.z = self.z - 1
+		self:saveCoords()
+	end
+	
+	return success
+end
+
+-- Turning
+function Nav:turnRight()
+	-- this will always succeed
+	turtle.turnRight()
+	self.facing = self.facing + 1
+	if self.facing > 4 then
+		self.facing = self.facing - 4
+	end
+	self:saveCoords()
+end
+
+function Nav:turnLeft()
+	turtle.turnLeft()
+	self.facing = self.facing - 1
+	if self.facing < 1 then
+		self.facing = self.facing + 4
+	end
+	self:saveCoords()
+end
+
+function Nav:turnToFace(goal)
+	-- goal will be 1,2,3, or 4
+	goal = tonumber(goal)
+	
+	if self.facing == goal then return end
+	
+	if self.facing == 1 and goal == 4 then
+		self:turnLeft()
+		
+	elseif self.facing == 4 and goal == 1 then
+		self:turnRight()
+		
+	elseif self.facing > goal then
+		while self.facing ~= goal do
+			self:turnLeft()
+		end
+	else
+		while self.facing ~= goal do
+			self:turnRight()
+		end
+	end
+	
+	self:saveCoords()
+end 
+			
+		
+
+
+
+
+
+
+
+  
+		
+
+
+	

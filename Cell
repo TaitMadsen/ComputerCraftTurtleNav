@@ -1,0 +1,57 @@
+-- Cell
+-- This is a vertex object for use with Map and Heap
+
+-- Cell CONFORMS to the Heap protocol
+
+Cell = {}
+
+function new(cellCoords, goalCoords, previous) -- the coords will each be a table with .x .y and .z
+	local object = {}
+	object.x = cellCoords.x
+	object.y = cellCoords.y
+	object.z = cellCoords.z
+	
+	if previous == nil then
+		object.distanceFromStart = 0
+	else
+		object.distanceFromStart = previous.distanceFromStart + 1
+		object.previous = previous
+	end
+	-- the heuristic
+	local h = math.abs(goalCoords.x - object.x) + math.abs(goalCoords.y - object.y) + math.abs(goalCoords.z - object.z)
+	object.weight = object.distanceFromStart + h
+	
+	setmetatable(object, {__index=Cell})
+	return object
+end
+
+
+-- a class method that produces a key based on coords
+function toKey(x, y, z)
+	local key = ""
+	key = key .. x .. " "
+	key = key .. y .. " "
+	key = key .. z
+	return key
+end
+
+-- an instance method that does the same thing
+function Cell:toKey()
+	return toKey(self.x, self.y, self.z)
+end
+
+-- returns a boolean
+-- location will be a table with .x .y and .z
+function Cell:isLocation(location) 
+	if self.x == location.x and self.y == location.y and self.z == location.z then
+		return true
+	else
+		return false
+	end
+end
+
+
+
+
+
+	
