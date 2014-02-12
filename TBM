@@ -1,0 +1,34 @@
+-- TBM
+-- A file for useful functions I write, so they can be used elsewhere
+
+function log(string)
+	print( "Day " .. os.day() .. ", " .. textutils.formatTime( os.time(), false) .. ": " .. string )
+end
+
+-- This will only work with single-place patterns
+function split(string, pat)
+	local t = {}
+	temp = ""
+	for i = 1,#string do
+		local c = string:sub(i,i)
+		if c == pat then
+			table.insert(t, temp)
+			temp = ""
+		else
+			temp = temp .. c
+		end
+	end
+	
+	table.insert(t, temp)
+	return t
+end
+
+-- returns the number of elements in a table, for real ;)
+function numElements(t)
+	local sum = 0
+	for k,v in pairs(t) do
+		sum = sum + 1
+	end
+	
+	return sum
+end

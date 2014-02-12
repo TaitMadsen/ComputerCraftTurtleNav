@@ -1,0 +1,123 @@
+-- Heap
+
+Heap = {}
+
+function new(priority, priorityKey)
+	if not (priority == "max" or priority == "min") then
+		print("Unrecognized priority: " .. priority)
+		print("Please use 'max' or 'min' ")
+		error()
+	end
+	
+	local object = {}
+	object.priority = priority -- this will be either min or max
+	object.priorityKey = priorityKey -- the key to sort by
+	object.array = {}
+	object.size = 0
+	setmetatable(object, {__index=Heap} )
+	return object
+end
+
+function Heap:getPriority(index)
+	if self.priority == "max" then
+		return self.array[index][self.priorityKey]
+	else
+		return -1 * self.array[index][self.priorityKey]
+	end
+end
+
+function Heap:bubbleUp(index)
+	-- if this is not the head node
+	if index ~= 1 then
+		-- if higher priority than parent
+		local parentIndex = math.floor(index/2)
+		if self:getPriority(index) > self:getPriority( parentIndex ) then
+			-- switch them
+			local thisElement = self.array[index]
+			local parent = self.array[parentIndex]
+		
+			self.array[index] = parent
+			self.array[parentIndex] = thisElement
+		
+			self:bubbleUp(parentIndex)
+		end
+	end
+end
+
+
+function Heap:getHead()
+	return self.array[1]
+end
+
+function Heap:insert(element)
+	self.size = self.size + 1
+	self.array[ self.size ] = element
+	self:bubbleUp( self.size )
+end
+
+function Heap:bubbleDown(index)
+	local indexTable = {index*2, index*2 + 1}
+	for c=1,2 do
+		local childIndex = indexTable[c]
+		-- if the child exists
+		if childIndex <= self.size then
+			-- if the child has higher priority than the parent, switch them
+			if self:getPriority(childIndex) > self:getPriority(index) then			
+				local originalChild = self.array[childIndex]
+				local originalParent = self.array[index]
+				
+				self.array[childIndex] = originalParent
+				self.array[index] = originalChild
+				
+				-- bubble down the child
+				self:bubbleDown(childIndex)
+			end
+		end
+	end
+end
+
+function Heap:deleteHead()
+	local ret = self.array[1]
+	-- replace the head with the last item in the array, and bubble that down
+	self.array[1] = self.array[self.size]
+	self.array[self.size] = nil
+	self.size = self.size - 1
+	
+	self:bubbleDown(1)
+	
+	return ret
+end
+
+function Heap:toStringByKey(key)
+	local ret = ""
+	for k,v in pairs(self.array) do
+		ret = ret .. v[key] .. ", "
+	end
+	
+	return ret
+end
+			
+			
+		
+		
+		
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+
+	

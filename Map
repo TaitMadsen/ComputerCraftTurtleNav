@@ -1,0 +1,368 @@
+-- Map
+
+os.loadAPI("TBM")
+os.loadAPI("Nav")
+os.loadAPI("Heap")
+os.loadAPI("Cell")
+
+Map = {}
+
+-- constructors and saving
+function new(mapName, direction) 
+	local object = {}
+	object.nav = Nav.new(mapName .. "Coords.txt")
+	object.grid = {}
+	object.orientation = direction -- this answers: "To where does nav.facing=1 pont?"  It will be East, North, etc.
+	object.fileName = mapName .. "MapData.txt"
+	setmetatable(object, {__index=Map} )
+	object:save()
+	return object
+end
+
+function loadFromFile(mapName)
+	local h = fs.open(mapName .. "MapData.txt", 'r')
+	local object = textutils.unserialize( h.readAll() )
+	h.close()
+	object.nav = Nav.loadFromFile(object.nav.fileName)
+	setmetatable(object, {__index=Map} )
+	return object
+end
+	
+function Map:save()
+	local h = fs.open(self.fileName, 'w')
+	h.write( textutils.serialize(self) )
+	h.close()
+end
+
+function Map:orientationFromFacing(facing)
+	local orientation2Number = {North=1,East=2,South=3,West=4}
+	local dir = orientation2Number[ self.orientation ]
+	dir = dir + facing - 2
+	dir = dir%4 + 1
+	
+	local num2Orientation = {"North","East","South","West"}
+	return num2Orientation[dir]
+end
+	
+
+-- updating the grid
+-- grid will be indexed: grid[x][y][z]
+function Map:updateBlock(dir, data)
+	local blockX = 0
+	local blockY = 0 -- the coords of the block we're looking at
+	local blockZ = 0 
+	-- figuring the block's coords
+	if dir == "forward" then
+		-- dependent on facing
+		blockZ = self.nav.z
+		if self.nav.facing == 1 then
+			blockX = self.nav.x
+			blockY = self.nav.y + 1
+		elseif self.nav.facing == 2 then
+			blockX = self.nav.x + 1
+			blockY = self.nav.y
+		elseif self.nav.facing == 3 then
+			blockX = self.nav.x
+			blockY = self.nav.y - 1
+		elseif self.nav.facing == 4 then
+			blockX = self.nav.x - 1
+			blockY = self.nav.y
+		else
+			TBM.log("Unrecognized facing: " .. self.nav.facing)
+			error()
+		end
+	elseif dir == "up" then
+		blockX = self.nav.x
+		blockY = self.nav.y
+		blockZ = self.nav.z + 1
+	elseif dir == "down" then
+		blockX = self.nav.x
+		blockY = self.nav.y
+		blockZ = self.nav.z - 1
+	else
+		TBM.log("Unrecognized direction: " .. dir)
+	end
+	
+	-- actually update the grid
+	self:updateGrid(blockX, blockY, blockZ, data, true)
+end
+
+function Map:updateGrid(x, y, z, data, save)
+	-- this makes sure to construct the tables
+	if self.grid[x] == nil then
+		self.grid[x] = {}
+	end
+	
+	if self.grid[x][y] == nil then
+		self.grid[x][y] = {}
+	end
+	
+	self.grid[x][y][z] = data
+	if save then self:save() end	
+end
+
+-- this requires a wrapped sensor
+function Map:scan(sensor)
+	local scan = sensor.sonicScan()
+	
+	for k,v in pairs(scan) do
+		local blockX = 0
+		local blockY = 0
+		local blockZ = 0
+		
+		-- Z.  Remember, my Z is Minecraft's Y
+		blockZ = self.nav.z + v.y
+		
+		-- X and Y.
+		if self.orientation == "North" then
+			blockX = self.nav.x + v.x
+			blockY = self.nav.y - v.z
+		elseif self.orientation == "East" then
+			blockX = self.nav.x + v.z
+			blockY = self.nav.y + v.x
+		elseif self.orientation == "South" then
+			blockX = self.nav.x - v.x
+			blockY = self.nav.y + v.z
+		elseif self.orientation == "West" then
+			blockX = self.nav.x - v.z
+			blockY = self.nav.y - v.x
+		else
+			TBM.log("Unrecognized direction: " .. self.orientation)
+			error()
+		end
+		
+		local data = ""
+		if v["type"] == "SOLID" then
+			data = "solid"
+		elseif v["type"] == "UNKNOWN" then -- this actually means empty
+			data = "empty"
+		elseif v["type"] == "LIQUID" then
+			data = "liquid"
+		else
+			data = "unknown"
+		end
+		
+		-- if the euclidean distance between the turtle and the block
+		-- is greater than 6, the block is truly unknown
+		local distance = math.sqrt( (self.nav.x - blockX)^2 + (self.nav.y - blockY)^2 + (self.nav.z - blockZ)^2 )
+		if distance > 6 then data = "unknown" end
+		
+		if data ~= "unknown" then
+			self:updateGrid(blockX, blockY, blockZ, data, false)
+		end
+	end
+	self:save()
+end
+
+function Map:query(x, y, z)
+	-- returns the data at a specific location, or NA if it does't exist
+	NA = "unknown" -- the name for data that doesn't exist
+	
+	if self.grid[x] == nil then
+		return NA
+	elseif self.grid[x][y] == nil then
+		return NA
+	elseif self.grid[x][y][z] == nil then
+		return NA
+	else
+		return self.grid[x][y][z]
+	end
+end
+
+-- A*, modified to aid exploration, if goal not reachable
+function Map:pathFromTo(start, goal) -- it is expected that these will be tables, with .x .y and .z
+	local closedSet = {} -- will be a set, keys will be set to true or nil
+	local unknownSet = {} -- a set to contain any cell that is marked as unknown that we run into.
+	local openSet = {} -- a set, will mirror the openHeap, is easy to query
+	local openHeap = Heap.new("min", "weight")
+	local startCell = Cell.new(start, goal, nil)
+	openHeap:insert(startCell)
+	openSet[ startCell:toKey() ] = true
+
+	while openHeap.size > 0 do
+		local current = openHeap:deleteHead()
+		openSet[ current:toKey() ] = nil
+		if current:isLocation(goal) then
+			return constructPath(current)
+		end
+		
+		-- (otherwise)
+		-- add current to the closed set
+		closedSet[ current:toKey() ] = true
+		
+		-- add all "empty" neighbors to the openHeap
+		local neighborCoords = {	{x=current.x+1, y=current.y, z=current.z},
+									{x=current.x-1, y=current.y, z=current.z},
+									{x=current.x, y=current.y+1, z=current.z},
+									{x=current.x, y=current.y-1, z=current.z},
+									{x=current.x, y=current.y, z=current.z+1},
+									{x=current.x, y=current.y, z=current.z-1}
+								}
+		for k,v in pairs(neighborCoords) do
+			local key = Cell.toKey(v.x, v.y, v.z)
+			-- if it the new neighbor is not in the closed set
+			if closedSet[key] == nil then
+				local cellContents = self:query(v.x, v.y, v.z)
+				if cellContents == "empty" or cellContents == "liquid" then
+					-- if this new neighbor is not already in the openSet/Heap
+					if openSet[key] == nil then
+						local newNeighbor = Cell.new(v, goal, current)
+						openHeap:insert(newNeighbor)
+						openSet[key] = true
+					end
+				
+				elseif cellContents == "unknown" then
+					unknownSet[key] = true
+				end
+			end
+		end
+	end
+	
+	if TBM.numElements(unknownSet) == 0 then
+		return "walled in"
+	else
+		return {"unknown", unknownSet}
+	end
+end
+			
+-- a class (or static) method to follow the previous pointers produce a path, but not commands
+function constructPath(current)
+	-- construct a table that 'goes in the correct direction'
+	-- DO include the starting cell - this may allow for planning
+	local path = {}
+	while current ~= nil do
+		table.insert(path, 1, current)
+		current = current.previous
+	end
+
+	return path
+end
+
+-- executes a path table
+-- expects turtle to be at path[1]
+function Map:executePath(t) -- {path=path, steps=steps, sensor=sensor}
+	-- steps represents the number of steps to take in this path
+	-- steps can be omitted, and it will default to the size of the path, executing all commands
+	local path = t.path -- (required)
+	local sensor = t.sensor or nil
+	local steps = t.steps or #path-1
+	
+	for i=2,steps+1 do
+		if sensor ~= nil then
+			self:scan(sensor)
+		end
+		
+		-- there are six directions to move, which may be abstracted to their unique features
+		if path[i].x > self.nav.x then
+			self.nav:turnToFace(2)
+			self.nav:forward()
+		elseif path[i].x < self.nav.x then
+			self.nav:turnToFace(4)
+			self.nav:forward()
+		elseif path[i].y > self.nav.y then
+			self.nav:turnToFace(1)
+			self.nav:forward()
+		elseif path[i].y < self.nav.y then
+			self.nav:turnToFace(3)
+			self.nav:forward()
+		elseif path[i].z > self.nav.z then
+			self.nav:up()
+		elseif path[i].z < self.nav.z then
+			self.nav:down()
+		else
+			print("Could not understand cell " .. i .. "in path table.")
+			print("cell " .. i .. ": " .. path[i]:toKey() )
+			error()
+		end
+	end
+end
+
+function pathToString(path)
+	-- turns the x, y, and z components of a path table into a string
+	-- for printing or saving to a file
+	local ret = ""
+	for k,cell in pairs(path) do
+		ret = ret .. cell:toKey() .. "\n"
+	end
+	
+	return ret
+end
+
+-- returns a boolean answering the question: "Can I get there from here?"
+function Map:goTo(goal, sensor) -- goal should be a table with .x .y and .z
+	local arrived = false
+	self:scan(sensor)
+	while not arrived do
+		local path = self:pathFromTo(self.nav, goal)
+		if path == "walled in" then 
+			TBM.log("Walled in, cannot reach goal")
+			return false
+		elseif self:query(goal.x, goal.y, goal.z) == "solid" then -- maybe I only want to do this if I am adjacent to the goal?
+			TBM.log("Goal is solid, cannot occupy solid space")
+			return false
+		elseif path[1] == "unknown" then
+			-- go one step, trying to explore more
+			-- go through the unknown set, and find the closest to the goal
+			local unknownSet = path[2]
+			local smallestDistance = nil
+			local closest = nil
+			
+			for k,v in pairs(unknownSet) do
+				local current = TBM.split(k, " ") -- note that by splitting, we get {[1]=x, [2]=y, [3]=z}
+				-- convert it
+				current.x = tonumber(current[1])
+				current.y = tonumber(current[2])
+				current.z = tonumber(current[3])
+				current[1] = nil
+				current[2] = nil
+				current[3] = nil
+				-- get the Manhattan distance from t to the goal
+				local currentDistance = math.abs(goal.x - current.x)
+										+
+										math.abs(goal.y - current.y)
+										+
+										math.abs(goal.z - current.z)
+				if smallestDistance == nil then
+					smallestDistance = currentDistance
+					closest = current
+				elseif currentDistance < smallestDistance then
+					smallestDistance = currentDistance
+					closest = current
+				end
+			end
+			-- take one step towards that unknown cell
+			-- however, A* won't let us get there if it is unknown, so we will temporarily delude ourselves that it is empty
+			self:updateGrid(closest.x, closest.y, closest.z, "empty", false)
+			local exPath = self:pathFromTo(self.nav, closest)
+			self:executePath{path=exPath, sensor=sensor, steps=1}
+			-- un-delude ourselves about the state of that cell,
+			self:updateGrid(closest.x, closest.y, closest.z, "unknown", false)
+			-- but if it was actually empty, and we just got close enough to see that:
+			self:scan(sensor)
+		else -- path is actually a legitimate path
+			self:executePath{path=path, sensor=sensor}
+			arrived = true
+		end
+	end
+	return true
+end
+		
+-- what if our goal is solid? (definitely can't get there)
+
+
+
+	
+	
+
+	
+	
+	
+	
+	
+	
+	
+			
+		
+
+
+
