@@ -7,17 +7,20 @@ Application: turtles (robots) in ComputerCraft, a mod for Minecraft
 
 The primary interface function in this repository is Map:goTo.  Most of the code here works in support of this function.  Map:goTo navigates the turtle from it’s current position to a goal position specified in the parameters.
 
-A demo of this code in action can be found at:
-http://www.youtube.com/watch?v=JCv6kOxcj2k
+Watch a [demo](http://www.youtube.com/watch?v=JCv6kOxcj2k) of this code in action!
 
 
 A MORE DETAILED OVERVIEW
 ========================
 The “:” notation exhibited by Map:goTo will be briefly explained here.
 Lua does not directly support Object Oriented Programming; however, OOP can be emulated by the use of metatables.  “:” indicates a metatable access, so if Foo is a class, f is an instance of class Foo, and bar() is a method in class Foo, bar() would be defined as:
->>> function Foo:bar()
+```
+function Foo:bar()
+```
 and called as:
->>> f:bar()
+```
+f:bar()
+```
 
 Map:goTo employs an implementation of the A* algorithm to generate paths to either (a) the goal coordinates, or (b) waypoint coordinates that Map:goTo has generates for exploration.  The rest of Map is dedicated to handling state representations utilized by Map:goTo and A*.
 
